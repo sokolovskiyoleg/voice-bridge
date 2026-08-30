@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.runpaper)
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.shadow)
+    kotlin("plugin.lombok") version "2.3.0"
 }
 
 group = project.properties["plugin.group"].toString()
@@ -42,6 +43,7 @@ dependencies {
     compileOnly(kotlin("stdlib"))
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
     implementation("org.bstats:bstats-bukkit:3.1.0")
+    testImplementation(kotlin("test"))
 }
 
 kotlin {

@@ -13,7 +13,7 @@ import su.plo.voice.api.event.EventSubscribe
 import su.plo.voice.api.server.PlasmoVoiceServer
 import su.plo.voice.api.server.audio.capture.ServerActivation
 import su.plo.voice.api.server.audio.line.ServerSourceLine
-import su.plo.voice.api.server.audio.source.ServerEntitySource
+import su.plo.voice.api.server.audio.source.ServerPlayerSource
 import su.plo.voice.api.server.event.audio.capture.PlayerServerActivationEndEvent
 import su.plo.voice.api.server.event.audio.capture.PlayerServerActivationEvent
 import su.plo.voice.api.server.event.connection.UdpClientConnectEvent
@@ -34,7 +34,7 @@ import java.util.logging.Logger
  *
  * Audio interception:
  * - Registers a listener on the "proximity" ServerActivation to intercept PV player audio
- * - Creates ServerEntitySources to relay SVC player audio to PV clients
+ * - Creates ServerPlayerSources to relay SVC player audio to PV clients
  */
 @Addon(
     id = "voice-bridge",
@@ -58,11 +58,11 @@ class PvAdapter(private val plugin: VoiceBridgePlugin) : AddonInitializer {
     // Re-paces bursty SVC frames into a steady 20ms cadence before sending to PV clients.
     private var repacer: FrameRepacer? = null
 
-    // ServerEntitySources for relaying SVC player audio to PV clients.
+    // ServerPlayerSources for relaying SVC player audio to PV clients.
     // Key: SVC player UUID (the "speaker"), Value: source that PV clients listen to.
-    // Uses entity sources instead of player sources because SVC-only players
-    // are not connected to PV's UDP server.
-    private val outboundSources = ConcurrentHashMap<UUID, ServerEntitySource>()
+    // SVC-only players have a fake PV connection registered by the bridge, which
+    // lets PV associate the source with the real player UUID for per-player volume.
+    private val outboundSources = ConcurrentHashMap<UUID, ServerPlayerSource>()
 
     // Track sequence numbers per source for outbound audio
     private val sequenceNumbers = ConcurrentHashMap<UUID, Long>()
@@ -218,10 +218,10 @@ class PvAdapter(private val plugin: VoiceBridgePlugin) : AddonInitializer {
     // --- Outbound: Send audio FROM an SVC player TO PV clients ---
 
     /**
-     * Send audio from an SVC player to nearby PV clients using ServerEntitySource.
+     * Send audio from an SVC player to nearby PV clients using ServerPlayerSource.
      *
-     * Uses entity sources instead of player sources because SVC-only players
-     * are not connected to PV's UDP server and cannot use ServerPlayerSource.
+     * SVC-only players are represented by fake PV connections, allowing the
+     * player source to retain the speaker UUID for PV's per-player volume.
      *
      * @return true if audio was sent successfully
      */
@@ -235,8 +235,8 @@ class PvAdapter(private val plugin: VoiceBridgePlugin) : AddonInitializer {
         val line = sourceLine ?: return false
 
         outboundSources.computeIfAbsent(senderUuid) { _ ->
-            val mcEntity = voiceServer.minecraftServer.getPlayerByInstance(senderPlayer)
-            line.createEntitySource(mcEntity, false).apply {
+            val voicePlayer = voiceServer.playerManager.getPlayerByInstance(senderPlayer)
+            line.createPlayerSource(voicePlayer, false).apply {
                 // Exclude dual-mod players — they already hear SVC audio natively
                 addFilter<VoicePlayer> { player -> !plugin.sessionManager.isDualMod(player.instance.uuid) }
             }
